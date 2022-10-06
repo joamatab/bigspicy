@@ -78,8 +78,9 @@ class Design():
         elif ref_name in self.external_modules:
           module = self.external_modules[ref_name]
         else:
-          raise Exception('instance references module which should be known or '
-                          'external, but is neither: {}'.format(ref_name))
+          raise Exception(
+              f'instance references module which should be known or external, but is neither: {ref_name}'
+          )
 
         # Internal or external, we need one of those objects here.
         instance.module = module
@@ -135,7 +136,7 @@ class Design():
     # implicit signals which we should be able to discover: clk, rst, etc.
     for module_name, module in self.known_modules.items():
       for net in self.power_net_names + self.ground_net_names:
-        if net in module.signals and not net in module.ports:
+        if net in module.signals and net not in module.ports:
           print(f'creating {module_name} port for implicit net: {net}')
           signal = module.GetOrCreateSignal(net)
           new_port = circuit.Port()
@@ -266,14 +267,6 @@ class Design():
           # Replace existing signal's parent.
           print(f'deleting parent signal: {new.parent_name}')
           del verilog_module.signals[new.parent_name]
-        else:
-          # TODO(growly): This is a bit of a hack. See one of my essays in the
-          # comments. Probably need to make SPEF extractor aware of slices. What
-          # we do for now is just make sure the port's signal is not deleted,
-          # so that subsequent references to 'a' for example do not create a
-          # new 1-wire signal called 'a'. There is no relational connection in the
-          # schema yet, though.
-          pass
         # Stand up a reference to the new signal.
         copied_in = verilog_module.GetOrCreateSignal(name)
         copied_in.width = new.width
@@ -285,7 +278,7 @@ class Design():
       else:
         signal = verilog_module.GetOrCreateSignal(name)
         print(f'new {signal}')
-        
+
     # Merge instances.
     for name, new in spef_module.instances.items():
       if name in verilog_module.instances:
@@ -379,13 +372,13 @@ class Design():
 
   def Show(self):
     print('design: ')
-    print('{} known modules:'.format(len(self.known_modules)))
+    print(f'{len(self.known_modules)} known modules:')
     for name, module in self.known_modules.items():
-      print('- {}'.format(name))
-      print('    {}'.format(module))
-    print('{} external modules:'.format(len(self.external_modules)))
+      print(f'- {name}')
+      print(f'    {module}')
+    print(f'{len(self.external_modules)} external modules:')
     for name, module in self.external_modules.items():
-      print('- {}'.format(name))
-      print('    {}'.format(module))
+      print(f'- {name}')
+      print(f'    {module}')
 
 

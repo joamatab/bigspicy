@@ -125,7 +125,7 @@ class CircuitWriter():
         store_pb = param_pb.value
       if isinstance(actual_value, float):
         store_pb.double = actual_value
-      elif isinstance(actual_value, int) or isinstance(actual_value, long):
+      elif isinstance(actual_value, (int, long)):
         store_pb.value.prefixed.integer = actual_value
       else:
         raise Exception(f'Unknown numerical type: {type(value)} for {value}')
@@ -158,16 +158,16 @@ class CircuitWriter():
       CircuitWriter.ToConnection(
           port_name, connection, instance_pb.connections.add())
 
-  def ToModule(module, module_pb):
-    module_pb.name = module.name
-    for name, value in module.default_parameters.items():
+  def ToModule(self, module_pb):
+    module_pb.name = self.name
+    for name, value in self.default_parameters.items():
       CircuitWriter.ToParameter(name, value, module_pb.parameters.add())
-    for port_name in module.port_order:
-      port = module.ports[port_name]
+    for port_name in self.port_order:
+      port = self.ports[port_name]
       CircuitWriter.ToPort(port, module_pb.ports.add())
-    for name, signal in module.signals.items():
+    for name, signal in self.signals.items():
       CircuitWriter.ToSignal(signal, module_pb.signals.add())
-    for name, instance in module.instances.items():
+    for name, instance in self.instances.items():
       CircuitWriter.ToInstance(instance, module_pb.instances.add())
 
   def ToCircuitProto(self):

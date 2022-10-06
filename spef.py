@@ -68,8 +68,7 @@ class SPEFNet():
     self.connections = set()
 
   def __repr__(self):
-    out = '{} connections: {}'.format(self.name, len(self.connections))
-    return out
+    return f'{self.name} connections: {len(self.connections)}'
 
 
 class SPEFPort():
@@ -80,7 +79,7 @@ class SPEFPort():
     self.direction = direction
 
   def __repr__(self):
-    return '"{}" [{}] {}'.format(self.name, self.node, self.direction)
+    return f'"{self.name}" [{self.node}] {self.direction}'
 
 
 class SPEFNodeReference():
@@ -96,13 +95,9 @@ class SPEFNodeReference():
     self.connection_to_nets = set()
 
   def __repr__(self):
-    out = '"{}": {} {} {}'.format(
-        self.original_name,
-        self.root,
-        self.suffix,
-        self.bus_index)
+    out = f'"{self.original_name}": {self.root} {self.suffix} {self.bus_index}'
     if self.internal_to_nets:
-      out += ' internal to {}'.format(self.internal_to_nets)
+      out += f' internal to {self.internal_to_nets}'
     return out
 
   def IsInternalOnly(self):
@@ -219,12 +214,12 @@ class SPEFReader():
       if not value:
         continue
       if isinstance(value, dict):
-        out += '{}: dict with {} entries\n'.format(key, len(value))
+        out += f'{key}: dict with {len(value)} entries\n'
       elif value is not None:
-        out += '{}: {}\n'.format(key, value)
+        out += f'{key}: {value}\n'
 
     for net, net_info in self.net_descriptions.items():
-      out += '\t{}: {}\n'.format(net, net_info)
+      out += f'\t{net}: {net_info}\n'
     return out
 
   def ReadSPEF(self, filename):
@@ -369,8 +364,7 @@ class SPEFReader():
 
     # Then check if it's a bus:
     if self.bus_delimiter_re:
-      bus_match = self.bus_delimiter_re.search(name)
-      if bus_match:
+      if bus_match := self.bus_delimiter_re.search(name):
         signal_name = bus_match.group(1)
         index = int(bus_match.group(2))
         node_ref = SPEFNodeReference(src=original_name,
@@ -414,20 +408,15 @@ class SPEFReader():
         node.connection_to_nets.add(self.current_net)
         #TODO(growly): What is this doing?
         self.current_net.connections.add(node)
-      elif keyword == '*P':
+      elif (keyword == '*P' or keyword == '*C'
+            or keyword != '*D' and keyword == '*L'):
         # Port connection to net
-        pass
-      elif keyword == '*C':
-        # Coordinates
         pass
       elif keyword == '*D':
         # Driving cell
         if node is None:
           raise SPEFBadAssumption('Assume *I would define node name before we saw *D')
         node.cell_type = tokens.pop(0)
-      elif keyword == '*L':
-        # Loading cell
-        pass
 
   def NodeToSignalName(self, node):
     if node.IsBusReference():
