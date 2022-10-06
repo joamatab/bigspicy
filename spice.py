@@ -58,7 +58,7 @@ class SpiceSubckt():
     """
     module = circuit.Module()
     module.name = self.name
-    
+
     # Since we're building this from a Spice .subckt definition, all ports are
     # inout and there are no buses. Right?
     for port in self.ports:
@@ -249,7 +249,7 @@ class SpiceReader():
           state = SpiceReader.State.SUBCKT
 
   def Read(self, file_name):
-    file_names = set([file_name])
+    file_names = {file_name}
     while file_names:
       file_name = file_names.pop()
       self.ReadWithoutRecursing(file_name, file_names)
@@ -289,8 +289,7 @@ class SpiceWriter():
       if port.signal.width == 1:
         spice_port_list.append(port_name)
       else:
-        for x in range(port.signal.width):
-          spice_port_list.append(f'{port_name}.{x}')
+        spice_port_list.extend(f'{port_name}.{x}' for x in range(port.signal.width))
     return ' '.join(spice_port_list)
 
   def SpiceSignalName(self, signal_or_slice, index=None, prefix=None):
@@ -308,7 +307,7 @@ class SpiceWriter():
     index = net_slice.bottom
     signal_name = f'{net_slice.signal.name}.{index}'
     if prefix:
-      signal_name = prefix + '_' + signal_name
+      signal_name = f'{prefix}_{signal_name}'
     return signal_name
 
   def _MakeSpiceName(self, instance, additional_prefix=None):
@@ -318,15 +317,10 @@ class SpiceWriter():
     # if it makes sense to include that in the Circuit protobuf.
 
     def EnsurePrefix(string, prefix):
-      if string.startswith(prefix):
-        return string
-      else:
-        return f'{prefix}{string}'
+      return string if string.startswith(prefix) else f'{prefix}{string}'
 
     def InsertSpiceApprovedPrefix(string, prefix):
-      if not prefix:
-        return string
-      return f'{string[0]}_{prefix}_{string[1:]}'
+      return f'{string[0]}_{prefix}_{string[1:]}' if prefix else string
 
     existing_name = InsertSpiceApprovedPrefix(instance.name, additional_prefix)
 
@@ -367,7 +361,7 @@ class SpiceWriter():
       if spice_signal_name in signal_map:
         spice_signal_name = signal_map[spice_signal_name]
       elif prefix:
-        spice_signal_name = prefix + '_'  + spice_signal_name
+        spice_signal_name = f'{prefix}_{spice_signal_name}'
 
       connection_list.append(spice_signal_name)
 
@@ -378,7 +372,7 @@ class SpiceWriter():
     skipped = False
 
     params = {}
-    params.update(module.default_parameters)
+    params |= module.default_parameters
     # Overwrite module parameters with any instance-specific ones.
     params.update(instance.parameters)
 
@@ -394,18 +388,15 @@ class SpiceWriter():
     else:
       type_name = module.name 
 
-    params_out = ' '.join('{}={}'.format(k, v) for k, v in params.items())
+    params_out = ' '.join(f'{k}={v}' for k, v in params.items())
     out = f'** {instance}\n'
     instantiation = f'{instance_name} {connections} {type_name} {params_out}'
-    if skipped:
-      out += f'** {instantiation} [skipped]'
-    else:
-      out += instantiation
+    out += f'** {instantiation} [skipped]' if skipped else instantiation
     return out
 
   def FlattenedInstance(self, instance, prefix=None):
     module = instance.module
-    
+
     signal_map = {}
 
     # TODO(growly): module params!
@@ -434,13 +425,11 @@ class SpiceWriter():
     return out
 
   def FormatInstances(self, instances, generate_names=False):
-    out = ''
-    for instance in instances:
-      if self.flatten and isinstance(instance.module, circuit.Module):
-        out += f'{self.FlattenedInstance(instance)}\n'
-      else:
-        out += f'{self.SpiceInstantiation(instance, generate_names=generate_names)}\n'
-    return out
+    return ''.join(
+        f'{self.FlattenedInstance(instance)}\n'
+        if self.flatten and isinstance(instance.module, circuit.Module) else
+        f'{self.SpiceInstantiation(instance, generate_names=generate_names)}\n'
+        for instance in instances)
 
   def WriteRegion(self, file_name, region, generate_names=False):
     # Ports have to be defined somehow. For now let's assume we have some in
@@ -604,7 +593,7 @@ class FFTSpec:
   def SpiceLine(self):
     node_name = ''
     if self.in_subcircuit:
-      node_name += self.in_subcircuit + ':'
+      node_name += f'{self.in_subcircuit}:'
     node_name += self.wire.SpiceName()
     line = f'.FFT V({node_name})'
     if self.base_freq_hz is not None:

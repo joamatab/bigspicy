@@ -146,16 +146,13 @@ class SpiceTestHarness:
     return ''
 
   def ParamStatements(self):
-    out = ''
-    for parameter in self.sweep_parameters.values():
-      out += f'.PARAM {parameter.name}={parameter.low}\n'
-    return out
+    return ''.join(f'.PARAM {parameter.name}={parameter.low}\n'
+                   for parameter in self.sweep_parameters.values())
 
   def StepStatements(self):
-    out = ''
-    for parameter in self.sweep_parameters.values():
-      out += f'.STEP {parameter.name} {parameter.low} {parameter.high} {parameter.step}\n'
-    return out
+    return ''.join(
+        f'.STEP {parameter.name} {parameter.low} {parameter.high} {parameter.step}\n'
+        for parameter in self.sweep_parameters.values())
 
 
 class TransientTest(SpiceTestHarness):
@@ -233,7 +230,11 @@ class TransientTest(SpiceTestHarness):
     dc_sources = ' '.join(map(lambda dc_load: dc_load.wire.SpiceName(), self.region.dc_sources.values()))
     drivers = ' '.join(map(lambda driver: driver.wire.SpiceName(), self.region.simulated_drivers.values()))
     probes = ' '.join(map(lambda probe: probe.wire.SpiceName(), self.region.voltage_probes.values()))
-    sub_probes = ' '.join(map(lambda probe: 'X0:' + probe.wire.SpiceName(), self.region.subcircuit_voltage_probes))
+    sub_probes = ' '.join(
+        map(
+            lambda probe: f'X0:{probe.wire.SpiceName()}',
+            self.region.subcircuit_voltage_probes,
+        ))
     return textwrap.dedent(f"""\
         ** bigspicy info:
         **  loads: {loads}
@@ -300,23 +301,15 @@ class TransientTest(SpiceTestHarness):
       node_name = probe.wire.SpiceName()
       print_list.append(f'V(X0:{probe.wire.SpiceName()})')
 
-    # DC sources at 0V potential are equivalent to a 0 resistance path to ground.
-    biases = list(self.region.dc_biases.values()) + self.biases
-    if biases:
+    if biases := list(self.region.dc_biases.values()) + self.biases:
       spice_test += '\n** dc biases\n'
-      num_dc_biases = 1
-      for dc_bias in biases:
+      for num_dc_biases, dc_bias in enumerate(biases, start=1):
         bias_v = dc_bias.value or self.default_fixed_dc_bias_v
         spice_test += f'.NODESET {dc_bias.wire.SpiceName()} {bias_v}\n'
-        num_dc_biases += 1
-
     if self.region.loads:
       spice_test += '\n** simulated loads\n'
-      num_caps = 1
-      for load in self.region.loads.values():
+      for num_caps, load in enumerate(self.region.loads.values(), start=1):
         spice_test += f'C{num_caps} {load.wire.SpiceName()} {self.ground_name} C={load.value}\n'
-        num_caps += 1
-
     for fft_spec in self.fft_specs:
       spice_test += '\n' + fft_spec.SpiceLine()
 
@@ -424,13 +417,13 @@ class LinearAnalysisTest(SpiceTestHarness):
                      output_directory=output_directory,
                      include_subckt=include_subckt,
                      tags=tags)
-    
+
     if include_subckt:
       root = include_subckt.removesuffix('.sp')
     else:
       root = os.path.join(self.output_directory, region.name)
     self.test_file_name = f'{root}.linear{parameter_type.name}.sp'
-    
+
     self.description = (
         f'Linear {parameter_type.name}-parameter test for region '
         f'"{self.region.name}"')
@@ -485,8 +478,7 @@ class LinearAnalysisTest(SpiceTestHarness):
         num_dc_sources += 1
 
     spice_test += '\n** N-port ports\n'
-    num_ports = 0
-    for port in self.region.port_network_ports.values():
+    for num_ports, port in enumerate(self.region.port_network_ports.values()):
       port_pb = self.manifest.ports.add()
       port_pb.number = num_ports + 1
       port_pb.node = port.wire.SpiceName()
@@ -494,7 +486,7 @@ class LinearAnalysisTest(SpiceTestHarness):
 
       if port.dc_bias is not None:
         param = port.dc_bias
-        node_name = port.wire.SpiceName() + '_syn'
+        node_name = f'{port.wire.SpiceName()}_syn'
         spice_test += (f'V{num_dc_sources} {port.wire.SpiceName()} '
                        f'{node_name} DC {{{param.name}}}\n')
         num_dc_sources += 1
@@ -502,16 +494,11 @@ class LinearAnalysisTest(SpiceTestHarness):
         node_name = port.wire.SpiceName()
       spice_test += f'P{num_ports} {node_name} {self.ground_name} port={num_ports+1} z0=0\n'
 
-      num_ports += 1
-
     # DC sources at 0V potential are equivalent to a 0 resistance path to ground.
     if self.region.dc_biases:
       spice_test += '\n** dc biases\n'
-      num_dc_biases = 0
       for dc_bias in self.region.dc_biases.values():
         spice_test += f'.NODESET {dc_bias.wire.SpiceName()} 0\n'
-        num_dc_biases += 1
-
     if self.region.loads:
       spice_test += '\n** simulated loads ommitted for linear analysis\n'
       #num_caps = 0
@@ -640,9 +627,7 @@ class SpiceAnalyser:
 
     def SplitIndex(string):
       match = re.match('^(.*)\.(\d+)$', string)
-      if not match:
-        return string, 0
-      return match.group(1), int(match.group(2))
+      return (match[1], int(match[2])) if match else (string, 0)
 
     name = spice_name
     if strip_prefixes:
@@ -665,9 +650,7 @@ class SpiceAnalyser:
 
   @staticmethod
   def _StripStringPrefix(string, prefix):
-    if string.startswith(prefix):
-      return string[len(prefix) + 1:]
-    return string
+    return string[len(prefix) + 1:] if string.startswith(prefix) else string
 
   def _ReadTransientResults(self, tags=None):
     tags_set = set(tags) if tags else None
@@ -704,10 +687,10 @@ class SpiceAnalyser:
         variable_name = delay_computation.spice_variable_name.upper()
         delays[variable_name] = (trigger, target)
 
-      others = {}
-      for measurement in transient.measurements:
-        others[measurement.spice_variable_name] = None
-
+      others = {
+          measurement.spice_variable_name: None
+          for measurement in transient.measurements
+      }
       measured = spice_util.ReadMeasurementsFile(measure_results_file)
       for key, value in measured.items():
         variable_name = key.upper()
@@ -760,8 +743,7 @@ class SpiceAnalyser:
         for key, series in probe_results.items():
           if key in ('TIME', 'Index'):
             continue
-          match = SIGNAL_FROM_XYCE_V_STATEMENT_RE.match(key)
-          if match:
+          if match := SIGNAL_FROM_XYCE_V_STATEMENT_RE.match(key):
             signal_name = match.group(1)
             series = probe_results[key]
             region.probe_results[
@@ -867,9 +849,9 @@ class SpiceAnalyser:
           # since they are not independent.
           I = np.zeros(num_ports)
           I[i] = 1.0
-          
+
           V = np.linalg.solve(Y, I)
-          
+
           # Overall input admittance at port i:
           #Y_in = 1/V[i]
 
@@ -913,9 +895,11 @@ class SpiceAnalyser:
 
       signals_to_plot = [
           driver.wire.SpiceName().upper()
-          for driver in region.simulated_drivers.values()] + [
-          'X0:' + driver.wire.SpiceName().upper()
-          for driver in sub_region_drivers]
+          for driver in region.simulated_drivers.values()
+      ] + [
+          f'X0:{driver.wire.SpiceName().upper()}'
+          for driver in sub_region_drivers
+      ]
 
       for spice_name in signals_to_plot:
         if spice_name not in results_by_signal:
@@ -932,12 +916,7 @@ class SpiceAnalyser:
         min_y = min(values)
         max_y = max(values)
         half_y = (max_y - min_y)/2 + min_y
-        x_centre = None
-        for i, y in enumerate(values):
-          if y > half_y:
-            x_centre = time[i]
-            break
-
+        x_centre = next((time[i] for i, y in enumerate(values) if y > half_y), None)
         if x_centre is not None:
           window = 60E-11  # seconds
           x_min = x_centre - window/2
@@ -1095,7 +1074,7 @@ class SpiceAnalyser:
           assert port_name is None or port_name == measurement.target_node
           port_name = measurement.target_node
           port_cross_time = results[variable_name]
-      
+
       if any(x is None for x in (
         in_max, in_min, port_max, port_min, port_cross_time, in_cross_time)):
         continue
@@ -1122,17 +1101,17 @@ class SpiceAnalyser:
         continue
       A = output_amplitude/input_amplitude
       beta = A * np.exp(-np.complex(0, 1)*phase_offset)
-      
+
       # Since we have created a basic voltage divider between the input R and
       # the input capacitance C, the transfer function is also:
       # Vo = Z_i / (Z_R + Z_i), where Z_i is the input impedance to the port
       # Z_i = Z_C + Z_R_i, and Z_R is the resistance impedance (10k) we
       # inserted.
       Z_R = 10000.0
-      
+
       # Therefore, we can equate and solve for beta:
       Z_i = Z_R*(beta/(1-beta))
-      
+
       # Whose equivalent capacitive component is:
       C = -1/(2*np.pi*freq_hz*np.imag(Z_i))
       module.large_signal_sinusoidal_capacitances[port_name] = C
@@ -1214,7 +1193,7 @@ class SpiceAnalyser:
     if not region.port_network_ports:
       # No ports. Nothing to test. Abandon.
       return
-    
+
     linearZ.Write()
 
   def _AddLargeSignalSinusoidalInputCapacitanceTest(
@@ -1356,7 +1335,7 @@ class SpiceAnalyser:
       # in spice libraries given to use.
       subckt_file = os.path.join(self.output_directory, f'{module.name}.sp')
       self.spice_writer.WriteModule(module, subckt_file)
-      print('wrote ' + subckt_file)
+      print(f'wrote {subckt_file}')
 
     # Set up the subcircuit for testing.
     self.AddDCSourcesForPowerNets(module, region)

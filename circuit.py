@@ -72,7 +72,7 @@ class Port:
     NONE = 4
 
   def __repr__(self):
-    return '[port: {} {}]'.format(self.signal, self.direction)
+    return f'[port: {self.signal} {self.direction}]'
 
   def __init__(self):
     # This is the internal signal which represents this port/pin. External
@@ -114,8 +114,7 @@ class Signal:
     self.parent_name = None
 
   def __repr__(self):
-    out = '[signal: {} w={}]'.format(self.name, self.width)
-    return out
+    return f'[signal: {self.name} w={self.width}]'
 
   def Connect(self, to, index=None):
     if index is None:
@@ -135,12 +134,8 @@ class Signal:
     return union
 
   def ConnectsAnything(self):
-    if not self.connects:
-      return False
-    for index, connects in self.connects.items():
-      if connects:
-        return True
-    return False
+    return (any(connects for index, connects in self.connects.items())
+            if self.connects else False)
 
   def FindLoadPorts(self, index=None):
     connects = self.Connects(index=index)
@@ -166,7 +161,7 @@ class Signal:
     connects = self.connects[index]
     connects.remove(entity)
     #print(f'removed {entity} from {index} {self}')
-    if isinstance(entity, Connection) or isinstance(entity, Port):
+    if isinstance(entity, (Connection, Port)):
       entity.DisconnectFromSignal()
 
   def DisconnectIndex(self, index, entity=None, include_ports=False):
@@ -240,11 +235,11 @@ class Connection:
     instance_name = self.instance.name if self.instance else 'None'
     desc = f'[connection {instance_name}/{self.port_name} =>'
     if self.signal is not None:
-      desc += '{}'.format(self.signal)
+      desc += f'{self.signal}'
     elif self.slice is not None:
-      desc += '{}'.format(self.slice)
+      desc += f'{self.slice}'
     elif self.concat is not None:
-      desc += '{}'.format(self.concat)
+      desc += f'{self.concat}'
     else:
       desc += 'disconnected'
     desc += ']'
@@ -277,9 +272,7 @@ class Connection:
       return self.signal
     if self.slice is not None:
       return self.slice
-    if self.concat is not None:
-      return self.concat
-    return None
+    return self.concat if self.concat is not None else None
 
   def GetConnectedSignal(self):
     if self.signal is not None:
@@ -314,7 +307,7 @@ class Slice:
     self.bottom = None
 
   def __repr__(self):
-    return '[slice: {}[{}:{}]]'.format(self.signal.name, self.top, self.bottom)
+    return f'[slice: {self.signal.name}[{self.top}:{self.bottom}]]'
 
   def Connect(self, to, index=None):
     if index is None:
@@ -384,11 +377,7 @@ class Instance:
       if port_name in self.connections:
         connection = self.connections[port_name]
         conn_list.append(f'{port_name}: {connection}')
-    return '[instance {} of {}, params={} connections={}]'.format(
-        self.name,
-        self.module_name,
-        self.parameters,
-        conn_list)
+    return f'[instance {self.name} of {self.module_name}, params={self.parameters} connections={conn_list}]'
 
 
 class TwoEndedElement(Instance):
@@ -473,10 +462,7 @@ class ExternalModule:
     except KeyError:
       pass
     guesses = list(filter(lambda x: x is not None and x > 0.0, [small, step, sin]))
-    if not guesses:
-      return None
-    mean = sum(guesses)/len(guesses)
-    return mean
+    return sum(guesses)/len(guesses) if guesses else None
 
   @staticmethod
   def GuessDirectionOfExternalModulePort(port_name):
@@ -573,8 +559,7 @@ class Module:
     return this 
 
   def __repr__(self):
-    desc = f'[module {self.name}]'
-    return desc
+    return f'[module {self.name}]'
 
   def GetOrCreateSignal(self, name, width=1):
     if name in self.signals:
@@ -629,9 +614,7 @@ class Module:
     def IsTerminalNode(node):
       if isinstance(node, Port):
         return True
-      if isinstance(node, Instance) and node.module.is_sequential:
-        return True
-      return False
+      return bool(isinstance(node, Instance) and node.module.is_sequential)
 
     def GetSliceOrSignal(sink):
       if isinstance(sink, Connection):
@@ -667,7 +650,7 @@ class Module:
       # Seen should contain... ports and connections.
       # If it contained instances you wouldn't be able to weave in and out of
       # the same instance.
-      seen = set([starting_path.start, starting_path.steps[-1]])
+      seen = {starting_path.start, starting_path.steps[-1]}
 
       print('new path')
       while to_visit:
@@ -738,7 +721,7 @@ class Module:
     sink_low = sink_range[0] if sink_range is not None else 0
     sink_high = sink_range[1] if sink_range is not None else sink.signal.width - 1
 
-    seen = set([source_port])
+    seen = {source_port}
     to_visit = collections.deque()
 
     for i in range(source_high - source_low + 1):
@@ -976,7 +959,7 @@ class Module:
     # FIXME(growly): '.NODESET' seems to do what we use 'DC source' for;
     # meaning it sets the initial conditions of a net where we introduce a DC
     # bias.
-    ignore_signals = ignore_signals or set(['GND', 'VSS', 'VDD'])
+    ignore_signals = ignore_signals or {'GND', 'VSS', 'VDD'}
 
     print(f'seed: {seed}')
 
@@ -992,10 +975,6 @@ class Module:
       if start in globally_seen:
         #print(f'start {start} in globally seen; skipping')
         continue
-      else:
-        #print(f'start is: {start}')
-        pass
-
       subgraph, seen, next_starting_points = Module.FindConnectedSubgraphFrom(start, ignore_signals)
       num_subgraphs += 1
       subgraph.name = f'region.{num_subgraphs}'
@@ -1151,10 +1130,7 @@ class DesignRegion:
     for transient_pb in self.transient_pbs:
       if tag in transient_pb.tags:
         return True
-    for linear_pb in self.linear_pbs:
-      if tag in linear_pb.tags:
-        return True
-    return False
+    return any(tag in linear_pb.tags for linear_pb in self.linear_pbs)
 
   def OrderedWires(self):
     all_wires = []

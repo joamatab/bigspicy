@@ -43,14 +43,12 @@ class DesignReader:
       #if node.attr_names:
       #  for attr in node.attr_names:
       #    print('attr: {}={}'.format(attr, getattr(node, attr)))
-      for c in node.children():
-        queue.append(c)
-
+      queue.extend(iter(node.children()))
     # Tidy up references made to other modules.
     for module in modules:
       name = module.name
       if name in design.known_modules:
-        raise Exception('duplicate definition of {}'.format(name))
+        raise Exception(f'duplicate definition of {name}')
       design.known_modules[module.name] = module
       if name in design.unknown_references:
         design.unknown_references.remove(name)
@@ -110,7 +108,7 @@ class ModuleReader:
     name = VerilogIdentifier(child.name).raw
     signed = child.signed
 
-    if isinstance(child, ast.Wire) or isinstance(child, ast.Reg):
+    if isinstance(child, (ast.Wire, ast.Reg)):
       # Treat 'wire' and 'reg' declarations the same for our purposes.
       if name in module.ports:
         # It appears the PyVerilog AST produces both a port-type and a `Wire`
@@ -121,12 +119,13 @@ class ModuleReader:
         # syntax is used, the ultimate port-object will already be present in
         # our `ports`. In which case, nothing more to do here. 
         return
-        
+
       assert(name not in module.signals)
-      width = 1 if not child.width else int(child.width.msb.value) - int(child.width.lsb.value) + 1
+      width = (int(child.width.msb.value) - int(child.width.lsb.value) + 1
+               if child.width else 1)
       signal = module.GetOrCreateSignal(name, width=width)
       return
-    
+
     # Else we assume it's an input, output, inout, etc.
     direction = Port.Direction.NONE
     if isinstance(child, ast.Input):
@@ -136,7 +135,8 @@ class ModuleReader:
     elif isinstance(child, ast.Inout):
       direction = Port.Direction.INOUT
 
-    width = 1 if not child.width else int(child.width.msb.value) - int(child.width.lsb.value) + 1
+    width = (int(child.width.msb.value) - int(child.width.lsb.value) + 1
+             if child.width else 1)
     if name in module.ports:
       port = module.ports[name]
       assert port.signal is not None, f'port {name} should have a signal by this point'
@@ -201,7 +201,7 @@ class ModuleReader:
         instance.connections[port_name] = connection
       module.instances[instance.name] = instance
 
-  def LoadParamList(module: Module, ast_node: ast.Node):
+  def LoadParamList(self, ast_node: ast.Node):
     if len(ast_node.children()):
-        print('{} has a param list, which we ignore'.format(module))
+      print(f'{self} has a param list, which we ignore')
 

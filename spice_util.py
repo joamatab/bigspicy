@@ -57,9 +57,8 @@ class NumericalValue():
     return self._InOtherUnits(other.unit).value == other.value
 
   def __lt__(self, other):
-    val = self._InOtherUnits(other.unit).value < other.value
     #print(f'{self} < {other} = {val}')
-    return val
+    return self._InOtherUnits(other.unit).value < other.value
 
   def __ge__(self, other):
     return other < self
@@ -191,18 +190,20 @@ def ReadFFTFile(file_name):
         # Store data for last signal being listed.
         # Prep for more data.
         match = HEADER_LINE_RE.match(line)
-        signal_name = match.group(1)  
+        signal_name = match[1]
         data = []
         continue
       if line.startswith('DC component'):
         match = DC_LINE_RE.match(line)
         if not match:
           raise Exception(f'{line} did not match')
-        data.append(FFTResultDataPoint(
-            index = -1,
-            freq_hz = 0.0,
-            magnitude = float(match.group(1)),
-            phase_deg = float(match.group(2))))
+        data.append(
+            FFTResultDataPoint(
+                index=-1,
+                freq_hz=0.0,
+                magnitude=float(match[1]),
+                phase_deg=float(match[2]),
+            ))
         continue
       split = line.split()
       try:
@@ -267,7 +268,7 @@ def ReadCSVFile(file_name):
     return []
   print(f'reading {file_name}')
   with open(file_name, 'r') as f:
-    return [row for row in csv.DictReader(f)]
+    return list(csv.DictReader(f))
   return []
 
 
